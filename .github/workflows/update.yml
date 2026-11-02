@@ -50,6 +50,8 @@ jobs:
           git add public/data/league.json
           git diff --cached --quiet || git commit -m "Daten aktualisiert [skip ci]"
           git push
+      - name: Cache-Version setzen (Handys laden nach Änderungen sofort neu)
+        run: sed -i "s/?v=[A-Za-z0-9]*/?v=${GITHUB_SHA::7}-$(date +%s)/g" public/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
