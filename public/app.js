@@ -431,51 +431,43 @@ function vCalc() {
   const ms = S.managers;
   let uid = store.get('kb-calc-uid', me() || ms[0]?.id);
   if (!S.mgr[uid]) uid = ms[0]?.id;
-  const budgets = store.get('kb-budgets', {});
-  // Eigener Kontostand kommt automatisch von Kickbase (Account, der die Daten abruft)
-  const ownerId = D.owner?.id;
-  let budget = budgets[uid] ?? (uid === ownerId && D.owner?.budget != null ? D.owner.budget : 0);
   let sel = new Set(store.get('kb-calc-sel-' + uid, []));
   const squad = [...(D.squads[uid] || [])].sort((a, b) => (a.pos - b.pos) || b.mv - a.mv);
 
   view.innerHTML = `<h2>Kader-Rechner</h2>
-    <p class="hint">Spieler zum Verkaufen anhaken und sehen, wie viel Geld du danach hast. Verkaufswert = aktueller Marktwert.</p>
+    <p class="hint">Spieler anhaken und sehen, wie viel sie beim Verkauf zusammen bringen (aktueller Marktwert).</p>
     <div class="field"><label>Manager</label><select id="cu">${ms.map((m) => `<option value="${m.id}" ${m.id === uid ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
-    <div class="field"><label>Aktueller Kontostand in € (aus der Kickbase-App, kann auch negativ sein)</label><input id="cb" type="number" inputmode="numeric" step="1000" value="${budget}" /></div>
     <div class="card calc-sum" id="sum"></div>
-    <div class="chips"><span class="chip" id="none">Auswahl leeren</span><span class="chip" id="worst">Schwächste Punktesammler wählen</span></div>
+    <div class="chips"><span class="chip" id="none">Auswahl leeren</span><span class="chip" id="worst">3 schwächste Punktesammler</span></div>
     <div class="card flush" id="list">
       ${squad.map((p) => `<label class="check ${sel.has(p.pi) ? 'sel' : ''}"><input type="checkbox" value="${p.pi}" ${sel.has(p.pi) ? 'checked' : ''}/>${pimg(p.pim)}<div class="grow"><div class="name">${esc(p.pn)} <span class="tag">${POS[p.pos] || ''}</span></div><div class="meta">${fmt(p.p)} Pkt. · Ø ${fmt(p.ap)}${p.prc ? ` · gekauft ${money(p.prc)}` : ''}</div></div><div class="right"><div class="num" style="font-weight:600">${money(p.mv)}</div><div class="meta num ${p.prc ? (p.mv - p.prc >= 0 ? 'pos' : 'neg') : ''}">${p.prc ? money(p.mv - p.prc, true) : ''}</div></div></label>`).join('') || '<div class="empty">Kein Kader gefunden.</div>'}
     </div>` + foot();
 
   const upd = () => {
     const chosen = squad.filter((p) => sel.has(p.pi));
-    const plus = chosen.reduce((s, p) => s + (p.mv || 0), 0);
-    const after = budget + plus;
+    const value = chosen.reduce((s, p) => s + (p.mv || 0), 0);
+    const bought = chosen.filter((p) => p.prc);
+    const diff = bought.reduce((s, p) => s + (p.mv - p.prc), 0);
     const left = squad.length - chosen.length;
-    $('#sum').innerHTML = `<div class="meta">Kontostand nach Verkauf</div>
-      <div class="big2 num ${after >= 0 ? 'pos' : 'neg'}">${money(after)}</div>
-      <div class="meta num">${money(budget)} + ${money(plus)} aus ${chosen.length} Spieler${chosen.length === 1 ? '' : 'n'} · ${left} bleiben im Kader${left < 11 ? ' ⚠️ weniger als 11' : ''}</div>`;
+    $('#sum').innerHTML = `<div class="meta">Wert der markierten Spieler</div>
+      <div class="big2 num">${money(value)}</div>
+      <div class="meta num">${chosen.length} Spieler markiert${bought.length ? ` · ggü. Kaufpreis <span class="${diff >= 0 ? 'pos' : 'neg'}">${money(diff, true)}</span>` : ''} · ${left} bleiben im Kader${left < 11 ? ' ⚠️ weniger als 11' : ''}</div>`;
     store.set('kb-calc-sel-' + uid, [...sel]);
   };
   upd();
 
   $('#cu').addEventListener('change', (e) => { store.set('kb-calc-uid', e.target.value); vCalc(); });
-  $('#cb').addEventListener('input', (e) => { budget = Number(e.target.value) || 0; budgets[uid] = budget; store.set('kb-budgets', budgets); upd(); });
   $('#list').addEventListener('change', (e) => {
     const cb = e.target; if (!cb.matches('input[type=checkbox]')) return;
     cb.checked ? sel.add(cb.value) : sel.delete(cb.value);
     cb.closest('label').classList.toggle('sel', cb.checked); upd();
   });
-  $('#none').addEventListener('click', () => { sel = new Set(); vCalcRefresh(); });
+  $('#none').addEventListener('click', () => { sel = new Set(); refresh(); });
   $('#worst').addEventListener('click', () => {
-    // So viele schwache Spieler wählen, bis der Kontostand nicht mehr negativ ist (mind. 1)
-    const ranked = [...squad].sort((a, b) => (a.ap || 0) - (b.ap || 0));
-    sel = new Set(); let b = budget;
-    for (const p of ranked) { if (b >= 0 && sel.size > 0) break; sel.add(p.pi); b += p.mv || 0; }
-    vCalcRefresh();
+    sel = new Set([...squad].sort((a, b) => (a.ap || 0) - (b.ap || 0)).slice(0, 3).map((p) => p.pi));
+    refresh();
   });
-  function vCalcRefresh() { store.set('kb-calc-sel-' + uid, [...sel]); vCalc(); }
+  function refresh() { store.set('kb-calc-sel-' + uid, [...sel]); vCalc(); }
 }
 
 const foot = () => `<div class="foot">Daten: Kickbase · aktualisiert ${new Date(D.updated).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>`;
