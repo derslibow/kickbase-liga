@@ -1,0 +1,61 @@
+name: Kickbase-Daten aktualisieren & Seite veröffentlichen
+
+on:
+  schedule:
+    # Alle 3 Stunden (UTC). Am Wochenende zusätzlich stündlich zwischen 15 und 22 Uhr UTC.
+    - cron: '17 */3 * * *'
+    - cron: '47 15-22 * * 5,6,0'
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: 'Alles komplett neu laden'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kickbase-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Daten von Kickbase holen
+        env:
+          KICKBASE_EMAIL: ${{ secrets.KICKBASE_EMAIL }}
+          KICKBASE_PASSWORD: ${{ secrets.KICKBASE_PASSWORD }}
+          KICKBASE_LEAGUE_ID: ${{ secrets.KICKBASE_LEAGUE_ID }}
+          FULL_REFRESH: ${{ inputs.full_refresh }}
+        run: node scripts/update.mjs
+      - name: Neuen Stand speichern
+        run: |
+          git config user.name "kickbase-bot"
+          git config user.email "kickbase-bot@users.noreply.github.com"
+          git add public/data/league.json
+          git diff --cached --quiet || git commit -m "Daten aktualisiert [skip ci]"
+          git push
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
