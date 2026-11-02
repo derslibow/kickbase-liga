@@ -432,11 +432,14 @@ function vCalc() {
   let uid = store.get('kb-calc-uid', me() || ms[0]?.id);
   if (!S.mgr[uid]) uid = ms[0]?.id;
   let sel = new Set(store.get('kb-calc-sel-' + uid, []));
+  const budgets = store.get('kb-budgets', {}); // nur lokal auf diesem Gerät gespeichert
+  let budget = budgets[uid] ?? null;
   const squad = [...(D.squads[uid] || [])].sort((a, b) => (a.pos - b.pos) || b.mv - a.mv);
 
   view.innerHTML = `<h2>Kader-Rechner</h2>
     <p class="hint">Spieler anhaken und sehen, wie viel sie beim Verkauf zusammen bringen (aktueller Marktwert).</p>
     <div class="field"><label>Manager</label><select id="cu">${ms.map((m) => `<option value="${m.id}" ${m.id === uid ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>Optional: Um herauszufinden, wie viel Geld du inkl. verkaufter Spieler übrig hast, gib hier deinen aktuellen Kontostand aus der Kickbase-App ein (wird nur auf deinem Handy gespeichert)</label><input id="cb" type="number" inputmode="decimal" step="any" placeholder="z. B. 4500000 oder -2000000" value="${budget ?? ''}" /></div>
     <div class="card calc-sum" id="sum"></div>
     <div class="chips"><span class="chip" id="none">Auswahl leeren</span><span class="chip" id="worst">3 schwächste Punktesammler</span></div>
     <div class="card flush" id="list">
@@ -449,14 +452,22 @@ function vCalc() {
     const bought = chosen.filter((p) => p.prc);
     const diff = bought.reduce((s, p) => s + (p.mv - p.prc), 0);
     const left = squad.length - chosen.length;
-    $('#sum').innerHTML = `<div class="meta">Wert der markierten Spieler</div>
-      <div class="big2 num">${money(value)}</div>
-      <div class="meta num">${chosen.length} Spieler markiert${bought.length ? ` · ggü. Kaufpreis <span class="${diff >= 0 ? 'pos' : 'neg'}">${money(diff, true)}</span>` : ''} · ${left} bleiben im Kader${left < 11 ? ' ⚠️ weniger als 11' : ''}</div>`;
+    $('#sum').innerHTML = `<div class="sum-grid">
+        <div><div class="meta">Wert markierte Spieler</div><div class="big2 num">${money(value)}</div></div>
+        ${budget != null ? `<div><div class="meta">Kontostand danach</div><div class="big2 num ${budget + value >= 0 ? 'pos' : 'neg'}">${money(budget + value)}</div></div>` : ''}
+      </div>
+      <div class="meta num" style="margin-top:4px">${chosen.length} markiert${bought.length ? ` · ggü. Kaufpreis <span class="${diff >= 0 ? 'pos' : 'neg'}">${money(diff, true)}</span>` : ''} · ${left} bleiben${left < 11 ? ' ⚠️ unter 11' : ''}</div>`;
     store.set('kb-calc-sel-' + uid, [...sel]);
   };
   upd();
 
   $('#cu').addEventListener('change', (e) => { store.set('kb-calc-uid', e.target.value); vCalc(); });
+  $('#cb').addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    budget = v === '' || isNaN(Number(v)) ? null : Number(v);
+    if (budget == null) delete budgets[uid]; else budgets[uid] = budget;
+    store.set('kb-budgets', budgets); upd();
+  });
   $('#list').addEventListener('change', (e) => {
     const cb = e.target; if (!cb.matches('input[type=checkbox]')) return;
     cb.checked ? sel.add(cb.value) : sel.delete(cb.value);
