@@ -156,3 +156,5 @@ label.check.sel { background: #2a1d20; }
 .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; background: var(--card2); color: var(--muted); margin-left: 4px; vertical-align: 1px; }
 .tag.open { background: #1d2b3a; color: #8cc4ff; }
 [hidden] { display: none !important; }
+.budget-row { display: flex; gap: 8px; }
+.budget-row .sign { flex: none; width: 52px; font-size: 22px; font-weight: 700; padding: 0; }

@@ -439,7 +439,7 @@ function vCalc() {
   view.innerHTML = `<h2>Kader-Rechner</h2>
     <p class="hint">Spieler anhaken und sehen, wie viel sie beim Verkauf zusammen bringen (aktueller Marktwert).</p>
     <div class="field"><label>Manager</label><select id="cu">${ms.map((m) => `<option value="${m.id}" ${m.id === uid ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
-    <div class="field"><label>Optional: Um herauszufinden, wie viel Geld du inkl. verkaufter Spieler übrig hast, gib hier deinen aktuellen Kontostand aus der Kickbase-App ein (wird nur auf deinem Handy gespeichert)</label><input id="cb" type="number" inputmode="decimal" step="any" placeholder="z. B. 4500000 oder -2000000" value="${budget ?? ''}" /></div>
+    <div class="field"><label>Optional: Um herauszufinden, wie viel Geld du inkl. verkaufter Spieler übrig hast, gib hier deinen aktuellen Kontostand aus der Kickbase-App ein (wird nur auf deinem Handy gespeichert)</label><div class="budget-row"><button type="button" class="btn sign" id="sign" aria-label="Vorzeichen wechseln">±</button><input id="cb" type="text" inputmode="decimal" autocomplete="off" placeholder="z. B. 4.500.000 oder −2,5 Mio" value="${budget != null ? budget.toLocaleString('de-DE') : ''}" /></div><div class="meta" style="margin:5px 2px 0">Minus-Betrag? Zahl eintippen und auf <b>±</b> tippen.</div></div>
     <div class="card calc-sum" id="sum"></div>
     <div class="chips"><span class="chip" id="none">Auswahl leeren</span><span class="chip" id="worst">3 schwächste Punktesammler</span></div>
     <div class="card flush" id="list">
@@ -462,11 +462,29 @@ function vCalc() {
   upd();
 
   $('#cu').addEventListener('change', (e) => { store.set('kb-calc-uid', e.target.value); vCalc(); });
-  $('#cb').addEventListener('input', (e) => {
-    const v = e.target.value.trim();
-    budget = v === '' || isNaN(Number(v)) ? null : Number(v);
+  // Eingabe tolerant lesen: "-4.500.000", "−2,5 Mio", "4500000", "3,2m"
+  const parseMoney = (raw) => {
+    let t = String(raw).trim().toLowerCase().replace(/[−–—]/g, '-').replace(/€|\s/g, '');
+    if (!t || t === '-') return null;
+    const neg = t.startsWith('-'); t = t.replace(/-/g, '');
+    let mult = 1;
+    if (/(mio|m)$/.test(t)) { mult = 1e6; t = t.replace(/(mio|m)$/, ''); }
+    else if (/(tsd|k)$/.test(t)) { mult = 1e3; t = t.replace(/(tsd|k)$/, ''); }
+    if (mult > 1) t = t.replace(/\./g, '').replace(',', '.');
+    else t = t.replace(/[.,](?=\d{3}(\D|$))/g, '').replace(',', '.');
+    const n = Number(t);
+    return isNaN(n) ? null : (neg ? -1 : 1) * n * mult;
+  };
+  const saveBudget = () => {
     if (budget == null) delete budgets[uid]; else budgets[uid] = budget;
     store.set('kb-budgets', budgets); upd();
+  };
+  $('#cb').addEventListener('input', (e) => { budget = parseMoney(e.target.value); saveBudget(); });
+  $('#sign').addEventListener('click', () => {
+    const inp = $('#cb');
+    const v = inp.value.trim().replace(/^[−–—]/, '-');
+    inp.value = v.startsWith('-') ? v.slice(1) : '-' + v;
+    budget = parseMoney(inp.value); saveBudget();
   });
   $('#list').addEventListener('change', (e) => {
     const cb = e.target; if (!cb.matches('input[type=checkbox]')) return;
